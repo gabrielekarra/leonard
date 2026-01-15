@@ -202,13 +202,3 @@ Contributions are welcome! Please read our contributing guidelines before submit
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
-## Roadmap
-
-- [ ] Real model inference (Ollama integration)
-- [ ] MCP protocol implementation
-- [ ] RAG with LanceDB
-- [ ] Multiple conversation support
-- [ ] Light mode
-- [ ] Settings/preferences
-- [ ] File upload for indexing
