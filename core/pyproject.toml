@@ -1,0 +1,50 @@
+[tool.poetry]
+name = "leonard-core"
+version = "0.1.0"
+description = "The local-first engine to build and run private AI agents"
+authors = ["Leonard Team"]
+readme = "README.md"
+packages = [{include = "leonard"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+# API
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.32.0"}
+pydantic = "^2.10.0"
+httpx = "^0.28.0"
+# Model inference (install with Metal support on macOS)
+# CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python
+llama-cpp-python = "^0.3.2"
+# Required for llama-cpp-python server
+sse-starlette = "^2.0.0"
+starlette-context = "^0.3.6"
+# HuggingFace
+huggingface-hub = "^0.27.0"
+# RAG - Embeddings and Vector Storage
+sentence-transformers = "^2.2.2"
+lancedb = "^0.4.0"
+pyarrow = "^14.0.0"
+# RAG - Document Parsing
+pypdf = "^3.17.0"
+python-docx = "^1.1.0"
+openpyxl = "^3.1.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.23.0"
+ruff = "^0.1.0"
+
+[tool.poetry.scripts]
+leonard = "leonard.main:app"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
