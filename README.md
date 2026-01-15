@@ -1,8 +1,8 @@
-# Lokus
+# Leonard
 
 **The local-first engine to build and run private AI agents to automate your workflow.**
 
-Lokus is an open-source, local-first AI orchestrator that gives you total control over your data and productivity. Turn your computer into an autonomous agent capable of reasoning (SLM), remembering (Semantic Memory), and acting on external software (MCP), without ever sending sensitive data to the cloud.
+Leonard is an open-source, local-first AI orchestrator that gives you total control over your data and productivity. Turn your computer into an autonomous agent capable of reasoning (SLM), remembering (Semantic Memory), and acting on external software (MCP), without ever sending sensitive data to the cloud.
 
 **Tagline:** Modular. Orchestrate. Remember. Act.
 
@@ -27,13 +27,13 @@ Lokus is an open-source, local-first AI orchestrator that gives you total contro
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    LOKUS DESKTOP APP                        │
+│                    LEONARD DESKTOP APP                        │
 │                    (macOS Native - SwiftUI)                 │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────────────────────────────┐   │
 │  │   Sidebar   │  │            Content Area             │   │
 │  │             │  │                                     │   │
-│  │  askLokus   │  │   [Tab 1: Chat Interface]           │   │
+│  │  askLeonard │  │   [Tab 1: Chat Interface]           │   │
 │  │     ○       │  │   [Tab 2: AIs Management]           │   │
 │  │             │  │                                     │   │
 │  │    AIs      │  │                                     │   │
@@ -44,7 +44,7 @@ Lokus is an open-source, local-first AI orchestrator that gives you total contro
                               │ HTTP (localhost:7878)
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                      LOKUS CORE                             │
+│                      LEONARD CORE                           │
 │                      (Python Engine)                        │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
@@ -70,8 +70,8 @@ Lokus is an open-source, local-first AI orchestrator that gives you total contro
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/lokus.git
-   cd lokus
+   git clone https://github.com/yourusername/leonard.git
+   cd leonard
    ```
 
 2. **Install Python dependencies**
@@ -101,7 +101,7 @@ Lokus is an open-source, local-first AI orchestrator that gives you total contro
 4. **Build and run the macOS app**
    ```bash
    cd apps/desktop
-   open Lokus.xcodeproj
+   open Leonard.xcodeproj
    ```
    Then press Cmd+R to build and run in Xcode.
 
@@ -110,21 +110,21 @@ Lokus is an open-source, local-first AI orchestrator that gives you total contro
 Once both the core and app are running:
 - The Python core should be accessible at `http://localhost:7878`
 - Health check: `curl http://localhost:7878/api/health`
-- The macOS app should show "Lokus Core is not running" banner if the core is down
+- The macOS app should show "Leonard Core is not running" banner if the core is down
 
 ## Project Structure
 
 ```
-lokus/
+leonard/
 ├── README.md
 ├── LICENSE                    # MIT License
 ├── Makefile                   # Build commands
 │
 ├── apps/
 │   └── desktop/               # macOS native app (SwiftUI)
-│       ├── Lokus.xcodeproj
-│       └── Lokus/
-│           ├── LokusApp.swift
+│       ├── Leonard.xcodeproj
+│       └── Leonard/
+│           ├── LeonardApp.swift
 │           ├── Config/
 │           ├── Views/
 │           ├── Models/
@@ -133,7 +133,7 @@ lokus/
 │
 ├── core/                      # Python engine (FastAPI)
 │   ├── pyproject.toml
-│   └── lokus/
+│   └── leonard/
 │       ├── main.py
 │       ├── config.py
 │       ├── engine/
