@@ -1,4 +1,4 @@
-# Leonard
+# Leonard - KILLED BY CLAUDE COWORK
 
 **The local-first engine to build and run private AI agents to automate your workflow.**
 
@@ -27,7 +27,7 @@ Leonard is an open-source, local-first AI orchestrator that gives you total cont
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    LEONARD DESKTOP APP                        │
+│                    LEONARD DESKTOP APP                      │
 │                    (macOS Native - SwiftUI)                 │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────────────────────────────┐   │
