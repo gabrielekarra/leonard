@@ -1,5 +1,9 @@
-# Leonard - KILLED BY CLAUDE COWORK
+<p align="center">
+  <img src="leonard_logo.png" alt="leonard-logo" width="280" />
+</p>
 
+# Leonard - KILLED BY CLAUDE COWORK
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 **The local-first engine to build and run private AI agents to automate your workflow.**
 
 Leonard is an open-source, local-first AI orchestrator that gives you total control over your data and productivity. Turn your computer into an autonomous agent capable of reasoning (SLM), remembering (Semantic Memory), and acting on external software (MCP), without ever sending sensitive data to the cloud.
