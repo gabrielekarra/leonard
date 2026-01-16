@@ -1,28 +1,16 @@
 """Chat API routes."""
 
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from leonard.engine.orchestrator import LeonardOrchestrator
+from leonard.api import orchestrator_store
+from leonard.api.orchestrator_store import get_orchestrator
 from leonard.utils.logging import logger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-# Global orchestrator instance
-orchestrator: Optional[LeonardOrchestrator] = None
-
-
-async def get_orchestrator() -> LeonardOrchestrator:
-    """Get or create the orchestrator instance."""
-    global orchestrator
-    if orchestrator is None:
-        orchestrator = LeonardOrchestrator()
-        await orchestrator.initialize()
-    return orchestrator
 
 
 class ChatRequest(BaseModel):
@@ -55,6 +43,9 @@ async def send_message(request: ChatRequest):
 
     try:
         orch = await get_orchestrator()
+
+        if request.conversation_id:
+            orch.set_conversation_id(request.conversation_id)
 
         if request.stream:
             return StreamingResponse(
@@ -119,8 +110,7 @@ async def get_routing():
 @router.get("/status")
 async def get_status():
     """Get orchestrator status."""
-    global orchestrator
-    if orchestrator is None:
+    if orchestrator_store.orchestrator is None:
         return {
             "initialized": False,
             "running_models": [],
@@ -128,9 +118,9 @@ async def get_status():
         }
 
     return {
-        "initialized": orchestrator.is_initialized(),
-        "running_models": orchestrator.get_running_models(),
-        "tools_enabled": orchestrator.tools_enabled,
+        "initialized": orchestrator_store.orchestrator.is_initialized(),
+        "running_models": orchestrator_store.orchestrator.get_running_models(),
+        "tools_enabled": orchestrator_store.orchestrator.tools_enabled,
     }
 
 

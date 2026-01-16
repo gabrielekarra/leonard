@@ -105,9 +105,11 @@ class RunCommandTool(Tool):
         blocked_reason = self._is_blocked(command)
         if blocked_reason:
             return ToolResult(
-                success=False,
+                status="error",
+                action="run_command",
                 output=None,
                 error=f"Command blocked for safety: {blocked_reason}",
+                message_user="Command blocked for safety",
             )
 
         try:
@@ -128,9 +130,11 @@ class RunCommandTool(Tool):
             except asyncio.TimeoutError:
                 process.kill()
                 return ToolResult(
-                    success=False,
+                    status="error",
+                    action="run_command",
                     output=None,
                     error=f"Command timed out after {timeout} seconds",
+                    message_user="Command timed out",
                 )
 
             stdout_str = stdout.decode("utf-8", errors="replace")
@@ -145,7 +149,8 @@ class RunCommandTool(Tool):
 
             if process.returncode == 0:
                 return ToolResult(
-                    success=True,
+                    status="success",
+                    action="run_command",
                     output={
                         "stdout": stdout_str,
                         "stderr": stderr_str,
@@ -154,17 +159,19 @@ class RunCommandTool(Tool):
                 )
             else:
                 return ToolResult(
-                    success=False,
+                    status="error",
+                    action="run_command",
                     output={
                         "stdout": stdout_str,
                         "stderr": stderr_str,
                         "exit_code": process.returncode,
                     },
                     error=f"Command failed with exit code {process.returncode}",
+                    message_user=f"Command failed (exit {process.returncode})",
                 )
 
         except Exception as e:
-            return ToolResult(success=False, output=None, error=str(e))
+            return ToolResult(status="error", action="run_command", output=None, error=str(e))
 
 
 class GetSystemInfoTool(Tool):
@@ -211,10 +218,10 @@ class GetSystemInfoTool(Tool):
                 except Exception:
                     pass
 
-            return ToolResult(success=True, output=info)
+            return ToolResult(status="success", action="system_info", output=info)
 
         except Exception as e:
-            return ToolResult(success=False, output=None, error=str(e))
+            return ToolResult(status="error", action="system_info", output=None, error=str(e))
 
 
 # Export all shell tools

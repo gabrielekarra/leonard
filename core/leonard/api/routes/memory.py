@@ -33,6 +33,8 @@ class MemoryStatusResponse(BaseModel):
     enabled: bool
     indexed: bool
     indexing: bool
+    indexed_count: int = 0
+    indexed_files: list[str] = []
 
 
 class ToggleRequest(BaseModel):

@@ -2,35 +2,11 @@
 
 from fastapi import APIRouter, HTTPException
 
+from leonard.api.orchestrator_store import get_orchestrator
 from leonard.api.schemas import Skill, SuccessResponse, Tool, ToolUpdateRequest
 from leonard.utils.logging import logger
 
 router = APIRouter(tags=["tools"])
-
-# Mock data for MVP
-MOCK_TOOLS: dict[str, dict] = {
-    "filesystem": {
-        "id": "filesystem",
-        "name": "Filesystem",
-        "description": "Read and write local files",
-        "icon": "folder",
-        "enabled": True,
-    },
-    "terminal": {
-        "id": "terminal",
-        "name": "Terminal",
-        "description": "Execute shell commands",
-        "icon": "terminal",
-        "enabled": False,
-    },
-    "browser": {
-        "id": "browser",
-        "name": "Web Browser",
-        "description": "Search and browse the web",
-        "icon": "globe",
-        "enabled": False,
-    },
-}
 
 MOCK_SKILLS: dict[str, dict] = {
     "summarizer": {
@@ -52,17 +28,19 @@ MOCK_SKILLS: dict[str, dict] = {
 async def list_tools() -> list[Tool]:
     """List all available tools."""
     logger.info("Listing tools")
-    return [Tool(**tool) for tool in MOCK_TOOLS.values()]
+    orch = await get_orchestrator()
+    tools = orch.get_available_tools()
+    return [Tool(**tool) for tool in tools]
 
 
 @router.put("/tools/{tool_id}", response_model=SuccessResponse)
 async def update_tool(tool_id: str, request: ToolUpdateRequest) -> SuccessResponse:
     """Toggle a tool on/off."""
-    if tool_id not in MOCK_TOOLS:
-        raise HTTPException(status_code=404, detail="Tool not found")
-
+    orch = await get_orchestrator()
     logger.info(f"Updating tool {tool_id}: enabled={request.enabled}")
-    MOCK_TOOLS[tool_id]["enabled"] = request.enabled
+    updated = orch.set_tool_enabled(tool_id, request.enabled)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Tool not found")
 
     return SuccessResponse(
         success=True,

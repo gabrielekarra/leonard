@@ -77,7 +77,7 @@ struct SidebarButton: View {
 }
 
 #Preview {
-    SidebarView(selectedTab: .constant(.askLeonard))
+    SidebarView(selectedTab: .constant(.chat))
         .frame(width: 200, height: 500)
         .preferredColorScheme(.dark)
 }

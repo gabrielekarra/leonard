@@ -1,11 +1,12 @@
 """
 Base classes for Leonard tools.
+Defines the shared ToolResult/verification contract used across the system.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 
 class ToolCategory(str, Enum):
@@ -25,17 +26,67 @@ class RiskLevel(str, Enum):
 
 @dataclass
 class ToolResult:
-    """Result of a tool execution."""
-    success: bool
+    """
+    Result of a tool execution.
+
+    status: "success" | "error"
+    action: semantic action name (create|move|delete|list|index|read|other)
+    changed: affected file paths (before/after where applicable)
+    verification: post-op verification outcome
+    message_internal: structured/debug detail
+    message_user: optional short, user-facing text
+    """
+
+    status: Literal["success", "error"]
+    action: Optional[str]
     output: Any
     error: Optional[str] = None
+    # Mutation tracking - single source of truth for filesystem changes.
+    before_paths: list[str] = field(default_factory=list)
+    after_paths: list[str] = field(default_factory=list)
+    changed: list[str] = field(default_factory=list)
+    # Verification results (required for mutations).
+    verification: Optional["VerificationResult"] = None
+    verification_passed: Optional[bool] = None
+    verification_details: Optional[str] = None
+    # User-visible summary supplied by tools/formatter pipeline only.
+    display_summary_user: Optional[str] = None
+    message_internal: Optional[str] = None
+    message_user: Optional[str] = None
+
+    @property
+    def success(self) -> bool:
+        """Compatibility alias for callers expecting a boolean."""
+        return self.status == "success"
 
     def to_dict(self) -> dict:
         return {
+            "status": self.status,
             "success": self.success,
+            "action": self.action,
             "output": self.output,
             "error": self.error,
+            "before_paths": self.before_paths,
+            "after_paths": self.after_paths,
+            "changed": self.changed,
+            "verification": self.verification.to_dict() if self.verification else None,
+            "verification_passed": self.verification_passed,
+            "verification_details": self.verification_details,
+            "display_summary_user": self.display_summary_user,
+            "message_internal": self.message_internal,
+            "message_user": self.message_user,
         }
+
+
+@dataclass
+class VerificationResult:
+    """Represents the verification status of a tool action."""
+
+    passed: bool
+    details: str
+
+    def to_dict(self) -> dict:
+        return {"passed": self.passed, "details": self.details}
 
 
 @dataclass
@@ -57,6 +108,7 @@ class Tool(ABC):
     risk_level: RiskLevel
     parameters: list[ToolParameter] = field(default_factory=list)
     requires_confirmation: bool = False
+    enabled: bool = True
 
     @abstractmethod
     async def execute(self, **kwargs) -> ToolResult:
@@ -99,6 +151,19 @@ class ToolRegistry:
     def register(self, tool: Tool):
         """Register a tool."""
         self._tools[tool.name] = tool
+
+    def set_enabled(self, name: str, enabled: bool) -> bool:
+        """Enable or disable a tool by name."""
+        tool = self._tools.get(name)
+        if not tool:
+            return False
+        tool.enabled = enabled
+        return True
+
+    def is_enabled(self, name: str) -> bool:
+        """Check whether a tool is enabled."""
+        tool = self._tools.get(name)
+        return bool(tool and tool.enabled)
 
     def get(self, name: str) -> Optional[Tool]:
         """Get a tool by name."""

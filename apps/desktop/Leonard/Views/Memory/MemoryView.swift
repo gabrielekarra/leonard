@@ -2,6 +2,8 @@ import SwiftUI
 
 struct MemoryView: View {
     @Bindable var viewModel: MemoryViewModel
+    @Bindable var toolsViewModel: ToolsViewModel
+    @State private var toolsExpanded = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.large) {
@@ -57,6 +59,14 @@ struct MemoryView: View {
                 .cornerRadius(AppSpacing.small)
             }
 
+            ToolsSection(
+                toolsEnabled: $toolsViewModel.toolsEnabled,
+                isExpanded: $toolsExpanded,
+                onToggle: { enabled in
+                    Task { await toolsViewModel.toggleTools(enabled) }
+                }
+            )
+
             Spacer()
         }
         .padding(AppSpacing.large)
@@ -64,13 +74,14 @@ struct MemoryView: View {
         .onAppear {
             Task {
                 await viewModel.loadStatus()
+                await toolsViewModel.loadStatus()
             }
         }
     }
 }
 
 #Preview {
-    MemoryView(viewModel: MemoryViewModel())
+    MemoryView(viewModel: MemoryViewModel(), toolsViewModel: ToolsViewModel())
         .frame(width: 500, height: 400)
         .preferredColorScheme(.dark)
 }

@@ -30,6 +30,8 @@
 		A1000015212F0015 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000015212F0014 /* Assets.xcassets */; };
 		A1000016212F0016 /* MemoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000016212F0015 /* MemoryView.swift */; };
 		A1000017212F0017 /* MemoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000017212F0016 /* MemoryViewModel.swift */; };
+		A1000019212F0019 /* ToolsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000018212F0018 /* ToolsViewModel.swift */; };
+		A100001B212F001B /* ExternalToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001A212F001A /* ExternalToolView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +59,8 @@
 		A1000015212F0014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000016212F0015 /* MemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryView.swift; sourceTree = "<group>"; };
 		A1000017212F0016 /* MemoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryViewModel.swift; sourceTree = "<group>"; };
+		A1000018212F0018 /* ToolsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolsViewModel.swift; sourceTree = "<group>"; };
+		A100001A212F001A /* ExternalToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalToolView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -116,6 +120,7 @@
 				A10000E9212FE009 /* AskLeonard */,
 				A10000EA212FE00A /* AIs */,
 				A10000EB212FE00B /* Memory */,
+				A10000EC212FE00C /* ExternalTool */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -126,6 +131,14 @@
 				A1000016212F0015 /* MemoryView.swift */,
 			);
 			path = Memory;
+			sourceTree = "<group>";
+		};
+		A10000EC212FE00C /* ExternalTool */ = {
+			isa = PBXGroup;
+			children = (
+				A100001A212F001A /* ExternalToolView.swift */,
+			);
+			path = ExternalTool;
 			sourceTree = "<group>";
 		};
 		A10000E5212FE005 /* Models */ = {
@@ -145,6 +158,7 @@
 				A1000011212F0010 /* ChatViewModel.swift */,
 				A1000012212F0011 /* AIsViewModel.swift */,
 				A1000017212F0016 /* MemoryViewModel.swift */,
+				A1000018212F0018 /* ToolsViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -279,6 +293,8 @@
 				A1000014212F0014 /* CoreBridge.swift in Sources */,
 				A1000016212F0016 /* MemoryView.swift in Sources */,
 				A1000017212F0017 /* MemoryViewModel.swift in Sources */,
+				A1000019212F0019 /* ToolsViewModel.swift in Sources */,
+				A100001B212F001B /* ExternalToolView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

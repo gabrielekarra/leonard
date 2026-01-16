@@ -1,18 +1,21 @@
 import SwiftUI
 
 enum NavigationTab: String, CaseIterable {
-    case askLeonard = "askLeonard"
+    case chat = "Chat"
     case ais = "AIs"
     case memory = "Memory"
+    case externalTool = "External Tool"
 
     var icon: String {
         switch self {
-        case .askLeonard:
+        case .chat:
             return "bubble.left.and.bubble.right"
         case .ais:
             return "cpu"
         case .memory:
             return "brain.head.profile"
+        case .externalTool:
+            return "link"
         }
     }
 
@@ -22,10 +25,11 @@ enum NavigationTab: String, CaseIterable {
 }
 
 struct MainView: View {
-    @State private var selectedTab: NavigationTab = .askLeonard
+    @State private var selectedTab: NavigationTab = .chat
     @State private var chatViewModel = ChatViewModel()
     @State private var aisViewModel = AIsViewModel()
     @State private var memoryViewModel = MemoryViewModel()
+    @State private var toolsViewModel = ToolsViewModel()
 
     var body: some View {
         NavigationSplitView {
@@ -42,12 +46,14 @@ struct MainView: View {
     @ViewBuilder
     private var contentView: some View {
         switch selectedTab {
-        case .askLeonard:
+        case .chat:
             AskLeonardView(viewModel: chatViewModel)
         case .ais:
             AIsView(viewModel: aisViewModel)
         case .memory:
-            MemoryView(viewModel: memoryViewModel)
+            MemoryView(viewModel: memoryViewModel, toolsViewModel: toolsViewModel)
+        case .externalTool:
+            ExternalToolView()
         }
     }
 }

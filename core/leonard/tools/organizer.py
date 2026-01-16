@@ -3,10 +3,10 @@ File organizer tool for Leonard.
 Automatically organizes files into categorized folders.
 """
 
-import shutil
 from pathlib import Path
 
-from leonard.tools.base import Tool, ToolResult, ToolParameter, ToolCategory, RiskLevel
+from leonard.tools.base import Tool, ToolResult, ToolParameter, ToolCategory, RiskLevel, VerificationResult
+from leonard.tools.file_ops import FileOperations
 from leonard.utils.logging import logger
 
 
@@ -103,16 +103,20 @@ class OrganizeFilesTool(Tool):
             dir_path = Path(directory).expanduser().resolve()
 
             if not dir_path.exists():
-                return ToolResult(success=False, output=None, error=f"Directory not found: {directory}")
+                return ToolResult(
+                    status="error", action="organize", output=None, error=f"Directory not found: {directory}"
+                )
 
             if not dir_path.is_dir():
-                return ToolResult(success=False, output=None, error=f"Not a directory: {directory}")
+                return ToolResult(
+                    status="error", action="organize", output=None, error=f"Not a directory: {directory}"
+                )
 
             # Get list of files (not directories)
             files = [f for f in dir_path.iterdir() if f.is_file()]
 
             if not files:
-                return ToolResult(success=False, output=None, error="No files to organize")
+                return ToolResult(status="error", action="organize", output=None, error="No files to organize")
 
             # Categorize each file
             file_categories: dict[str, list[Path]] = {}
@@ -124,6 +128,8 @@ class OrganizeFilesTool(Tool):
 
             # Create folders and move files
             moved_files = []
+            moved_before: list[str] = []
+            moved_after: list[str] = []
             created_folders = []
 
             for category, cat_files in file_categories.items():
@@ -136,7 +142,7 @@ class OrganizeFilesTool(Tool):
                     cat_folder.mkdir()
                     created_folders.append(category)
 
-                # Move files
+                # Move files with verification
                 for file in cat_files:
                     dest = cat_folder / file.name
                     # Handle name conflicts
@@ -148,8 +154,13 @@ class OrganizeFilesTool(Tool):
                             dest = cat_folder / f"{base}_{counter}{ext}"
                             counter += 1
 
-                    shutil.move(str(file), str(dest))
-                    moved_files.append(f"{file.name} → {category}/")
+                    move_result = FileOperations.move_file(str(file), str(dest))
+                    if move_result.success:
+                        moved_files.append(f"{file.name} → {category}/")
+                        moved_before.extend(move_result.before_paths)
+                        moved_after.extend(move_result.after_paths)
+                    else:
+                        return move_result
 
             # Build result message
             result_lines = [f"Organized {len(moved_files)} files in {directory}:"]
@@ -168,19 +179,28 @@ class OrganizeFilesTool(Tool):
                     if len(cat_files) > 5:
                         result_lines.append(f"   ... and {len(cat_files) - 5} more")
 
+            verification = VerificationResult(True, "Files organized")
             logger.info(f"Organized {len(moved_files)} files into {len(file_categories)} categories")
 
             return ToolResult(
-                success=True,
+                status="success",
+                action="organize",
                 output="\n".join(result_lines),
-                error=None
+                error=None,
+                before_paths=moved_before,
+                after_paths=moved_after,
+                verification=verification,
+                verification_passed=verification.passed,
+                verification_details=verification.details,
+                display_summary_user=f"Organized {len(moved_files)} files in {directory}.",
+                message_user="Organized files",
             )
 
         except PermissionError:
-            return ToolResult(success=False, output=None, error=f"Permission denied: {directory}")
+            return ToolResult(status="error", action="organize", output=None, error=f"Permission denied: {directory}")
         except Exception as e:
             logger.error(f"Failed to organize files: {e}")
-            return ToolResult(success=False, output=None, error=str(e))
+            return ToolResult(status="error", action="organize", output=None, error=str(e))
 
 
 # Export tools

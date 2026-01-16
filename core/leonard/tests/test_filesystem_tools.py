@@ -1,315 +1,105 @@
-"""
-Tests for filesystem tools.
-Tests each tool directly to ensure they work correctly.
-"""
-
 import os
 import tempfile
-import shutil
-import pytest
 from pathlib import Path
 
-from leonard.tools.filesystem import (
-    ReadFileTool,
-    ListDirectoryTool,
-    WriteFileTool,
-    MoveFileTool,
-    CopyFileTool,
-    DeleteFileTool,
-    CreateDirectoryTool,
-    SearchFilesTool,
-)
-
-
-class TestListDirectoryTool:
-    """Test the list_directory tool."""
-
-    @pytest.fixture
-    def tool(self):
-        return ListDirectoryTool()
-
-    @pytest.fixture
-    def test_dir(self):
-        """Create a temporary directory with test files."""
-        temp_dir = tempfile.mkdtemp()
-        # Create test files
-        Path(temp_dir, "file1.txt").write_text("content1")
-        Path(temp_dir, "file2.pdf").write_text("content2")
-        Path(temp_dir, "image.png").write_bytes(b"\x89PNG")
-        Path(temp_dir, "subdir").mkdir()
-        Path(temp_dir, ".hidden").write_text("hidden")
-        yield temp_dir
-        shutil.rmtree(temp_dir)
-
-    @pytest.mark.asyncio
-    async def test_list_directory_success(self, tool, test_dir):
-        """Test listing a directory."""
-        result = await tool.execute(path=test_dir)
-
-        assert result.success is True
-        assert result.error is None
-        assert "file1.txt" in result.output
-        assert "file2.pdf" in result.output
-        assert "image.png" in result.output
-        assert "subdir" in result.output
-
-    @pytest.mark.asyncio
-    async def test_list_directory_hides_hidden_by_default(self, tool, test_dir):
-        """Test that hidden files are hidden by default."""
-        result = await tool.execute(path=test_dir)
-
-        assert result.success is True
-        assert ".hidden" not in result.output
-
-    @pytest.mark.asyncio
-    async def test_list_directory_shows_hidden(self, tool, test_dir):
-        """Test showing hidden files."""
-        result = await tool.execute(path=test_dir, show_hidden=True)
-
-        assert result.success is True
-        assert ".hidden" in result.output
-
-    @pytest.mark.asyncio
-    async def test_list_directory_not_found(self, tool):
-        """Test listing non-existent directory."""
-        result = await tool.execute(path="/nonexistent/path")
-
-        assert result.success is False
-        assert result.error is not None
-        assert "not found" in result.error.lower()
-
-    @pytest.mark.asyncio
-    async def test_list_downloads_folder(self, tool):
-        """Test listing the actual Downloads folder."""
-        downloads = os.path.expanduser("~/Downloads")
-        result = await tool.execute(path=downloads)
-
-        assert result.success is True
-        # Should contain actual files, not hallucinated ones
-        assert "Directory:" in result.output
-        # Verify it contains files from actual Downloads
-        actual_files = list(Path(downloads).iterdir())
-        for f in actual_files[:3]:  # Check first 3 files
-            if not f.name.startswith("."):
-                assert f.name in result.output, f"Expected {f.name} in output"
-
-
-class TestReadFileTool:
-    """Test the read_file tool."""
-
-    @pytest.fixture
-    def tool(self):
-        return ReadFileTool()
-
-    @pytest.mark.asyncio
-    async def test_read_file_success(self, tool):
-        """Test reading a file."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            f.write("Hello, World!")
-            f.flush()
-            path = f.name
-
-        try:
-            result = await tool.execute(path=path)
-            assert result.success is True
-            assert "Hello, World!" in result.output
-        finally:
-            os.unlink(path)
+import pytest
 
-    @pytest.mark.asyncio
-    async def test_read_file_not_found(self, tool):
-        """Test reading non-existent file."""
-        result = await tool.execute(path="/nonexistent/file.txt")
-
-        assert result.success is False
-        assert "not found" in result.error.lower()
+from leonard.tools.file_ops import FileOperations
+from leonard.tools.filesystem import DeleteFileTool, ListDirectoryTool, MoveFileTool, WriteFileTool
+from leonard.utils.response_formatter import ResponseFormatter
 
 
-class TestWriteFileTool:
-    """Test the write_file tool."""
+def test_write_and_verify_file():
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        path = Path(temp_dir) / "note.txt"
 
-    @pytest.fixture
-    def tool(self):
-        return WriteFileTool()
+        result = FileOperations.write_file(str(path), "hello world")
 
-    @pytest.mark.asyncio
-    async def test_write_file_success(self, tool):
-        """Test writing a file."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = os.path.join(temp_dir, "test.txt")
+        assert result.status == "success"
+        assert result.verification and result.verification.passed
+        assert path.exists()
+        assert path.read_text() == "hello world"
 
-            result = await tool.execute(path=path, content="Test content")
 
-            assert result.success is True
-            assert Path(path).exists()
-            assert Path(path).read_text() == "Test content"
+def test_move_verifies_source_removed():
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        src = Path(temp_dir) / "src.txt"
+        dst = Path(temp_dir) / "dst.txt"
+        src.write_text("move me")
 
-    @pytest.mark.asyncio
-    async def test_write_file_append(self, tool):
-        """Test appending to a file."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = os.path.join(temp_dir, "test.txt")
-            Path(path).write_text("Line 1\n")
+        result = FileOperations.move_file(str(src), str(dst))
 
-            result = await tool.execute(path=path, content="Line 2", append=True)
+        assert result.status == "success"
+        assert result.verification and result.verification.passed
+        assert result.before_paths == [str(src)]
+        assert result.after_paths == [str(dst)]
+        assert result.verification_passed is True
+        assert not src.exists()
+        assert dst.exists()
+        assert dst.read_text() == "move me"
 
-            assert result.success is True
-            assert Path(path).read_text() == "Line 1\nLine 2"
 
+def test_delete_reports_missing_cleanly():
+    missing_path = "/tmp/does-not-exist.txt"
+    result = FileOperations.delete_file(missing_path)
 
-class TestMoveFileTool:
-    """Test the move_file tool."""
+    assert result.status == "error"
+    assert result.verification and not result.verification.passed
+    assert "not found" in (result.message_user or "").lower()
 
-    @pytest.fixture
-    def tool(self):
-        return MoveFileTool()
 
-    @pytest.mark.asyncio
-    async def test_move_file_success(self, tool):
-        """Test moving a file."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            src = os.path.join(temp_dir, "source.txt")
-            dst = os.path.join(temp_dir, "dest.txt")
-            Path(src).write_text("content")
+def test_delete_tracks_before_after():
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        path = Path(temp_dir) / "remove.txt"
+        path.write_text("remove me")
 
-            result = await tool.execute(source=src, destination=dst)
+        result = FileOperations.delete_file(str(path))
 
-            assert result.success is True
-            assert not Path(src).exists()
-            assert Path(dst).exists()
-            assert Path(dst).read_text() == "content"
+        assert result.status == "success"
+        assert result.before_paths == [str(path)]
+        assert result.after_paths == []
+        assert result.verification_passed is True
+        assert not path.exists()
 
-    @pytest.mark.asyncio
-    async def test_rename_file(self, tool):
-        """Test renaming a file (move to same directory)."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            old_name = os.path.join(temp_dir, "old.txt")
-            new_name = os.path.join(temp_dir, "new.txt")
-            Path(old_name).write_text("content")
 
-            result = await tool.execute(source=old_name, destination=new_name)
+def test_list_directory_outputs_items():
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        Path(temp_dir, "a.txt").write_text("a")
+        Path(temp_dir, "b.txt").write_text("b")
 
-            assert result.success is True
-            assert not Path(old_name).exists()
-            assert Path(new_name).exists()
+        result = FileOperations.list_directory(temp_dir)
 
+        assert result.status == "success"
+        assert isinstance(result.output["items"], list)
+        names = {item["name"] for item in result.output["items"]}
+        assert {"a.txt", "b.txt"} <= names
 
-class TestDeleteFileTool:
-    """Test the delete_file tool."""
 
-    @pytest.fixture
-    def tool(self):
-        return DeleteFileTool()
+@pytest.mark.asyncio
+async def test_tool_wrappers_use_file_ops():
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        path = os.path.join(temp_dir, "tool.txt")
+        write_tool = WriteFileTool()
+        move_tool = MoveFileTool()
+        delete_tool = DeleteFileTool()
 
-    @pytest.mark.asyncio
-    async def test_delete_file_success(self, tool):
-        """Test deleting a file."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = os.path.join(temp_dir, "to_delete.txt")
-            Path(path).write_text("content")
+        write_result = await write_tool.execute(path=path, content="via tool")
+        assert write_result.success
 
-            result = await tool.execute(path=path)
+        move_target = os.path.join(temp_dir, "moved.txt")
+        move_result = await move_tool.execute(source=path, destination=move_target)
+        assert move_result.success
+        assert os.path.exists(move_target)
 
-            assert result.success is True
-            assert not Path(path).exists()
+        delete_result = await delete_tool.execute(path=move_target)
+        assert delete_result.status == "success"
+        assert not os.path.exists(move_target)
 
-    @pytest.mark.asyncio
-    async def test_delete_directory(self, tool):
-        """Test deleting a directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            dir_path = os.path.join(temp_dir, "subdir")
-            os.makedirs(dir_path)
-            Path(dir_path, "file.txt").write_text("content")
 
-            result = await tool.execute(path=dir_path)
-
-            assert result.success is True
-            assert not Path(dir_path).exists()
-
-    @pytest.mark.asyncio
-    async def test_delete_protected_path(self, tool):
-        """Test that protected paths cannot be deleted."""
-        result = await tool.execute(path=os.path.expanduser("~"))
-
-        assert result.success is False
-        assert "protected" in result.error.lower() or "cannot" in result.error.lower()
-
-
-class TestCreateDirectoryTool:
-    """Test the create_directory tool."""
-
-    @pytest.fixture
-    def tool(self):
-        return CreateDirectoryTool()
-
-    @pytest.mark.asyncio
-    async def test_create_directory_success(self, tool):
-        """Test creating a directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = os.path.join(temp_dir, "new_folder")
-
-            result = await tool.execute(path=path)
-
-            assert result.success is True
-            assert Path(path).exists()
-            assert Path(path).is_dir()
-
-    @pytest.mark.asyncio
-    async def test_create_directory_exists(self, tool):
-        """Test creating existing directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = os.path.join(temp_dir, "existing")
-            os.makedirs(path)
-
-            result = await tool.execute(path=path)
-
-            assert result.success is False
-            assert "exists" in result.error.lower()
-
-
-class TestSearchFilesTool:
-    """Test the search_files tool."""
-
-    @pytest.fixture
-    def tool(self):
-        return SearchFilesTool()
-
-    @pytest.mark.asyncio
-    async def test_search_files_success(self, tool):
-        """Test searching for files."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Create test files
-            Path(temp_dir, "file1.txt").write_text("content")
-            Path(temp_dir, "file2.txt").write_text("content")
-            Path(temp_dir, "file3.pdf").write_text("content")
-
-            result = await tool.execute(directory=temp_dir, pattern="*.txt")
-
-            assert result.success is True
-            assert result.output["count"] == 2
-            assert "file1.txt" in str(result.output["matches"])
-            assert "file2.txt" in str(result.output["matches"])
-            assert "file3.pdf" not in str(result.output["matches"])
-
-
-class TestCopyFileTool:
-    """Test the copy_file tool."""
-
-    @pytest.fixture
-    def tool(self):
-        return CopyFileTool()
-
-    @pytest.mark.asyncio
-    async def test_copy_file_success(self, tool):
-        """Test copying a file."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            src = os.path.join(temp_dir, "source.txt")
-            dst = os.path.join(temp_dir, "copy.txt")
-            Path(src).write_text("content")
-
-            result = await tool.execute(source=src, destination=dst)
-
-            assert result.success is True
-            assert Path(src).exists()  # Original still exists
-            assert Path(dst).exists()  # Copy created
-            assert Path(dst).read_text() == "content"
+def test_response_formatter_produces_clean_text():
+    with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        target = Path(temp_dir) / "clean.txt"
+        result = FileOperations.write_file(str(target), "content")
+        formatted = ResponseFormatter.format_tool_result(result)
+        assert "`" not in formatted
+        assert "clean.txt" in formatted

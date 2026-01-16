@@ -5,8 +5,6 @@ Provides document indexing and RAG retrieval with a simple toggle interface.
 
 import json
 from pathlib import Path
-from typing import Optional
-
 from leonard.utils.logging import logger
 
 
@@ -18,6 +16,7 @@ class MemoryManager:
 
     INDEX_DIR = Path.home() / ".leonard" / "index"
     SETTINGS_FILE = Path.home() / ".leonard" / "memory_settings.json"
+    INDEX_METADATA_FILE = INDEX_DIR / "index_metadata.json"
     AUTO_FOLDERS = ["Documents", "Desktop", "Downloads"]
 
     def __init__(self):
@@ -26,6 +25,7 @@ class MemoryManager:
         self.index = None
         self.embed_model = None
         self._indexing = False
+        self.indexed_files: list[str] = []
 
     async def initialize(self):
         """Initialize the memory manager."""
@@ -43,6 +43,28 @@ class MemoryManager:
             except Exception as e:
                 logger.warning(f"Failed to load memory settings: {e}")
                 self.enabled = False
+
+        self._load_index_metadata()
+
+    def _load_index_metadata(self) -> None:
+        """Load indexed file metadata from disk."""
+        if self.INDEX_METADATA_FILE.exists():
+            try:
+                with open(self.INDEX_METADATA_FILE, "r") as f:
+                    data = json.load(f)
+                    self.indexed_files = data.get("indexed_files", [])
+            except Exception as e:
+                logger.warning(f"Failed to load index metadata: {e}")
+                self.indexed_files = []
+
+    def _save_index_metadata(self) -> None:
+        """Persist indexed file metadata to disk."""
+        try:
+            self.INDEX_DIR.mkdir(parents=True, exist_ok=True)
+            with open(self.INDEX_METADATA_FILE, "w") as f:
+                json.dump({"indexed_files": self.indexed_files}, f)
+        except Exception as e:
+            logger.warning(f"Failed to save index metadata: {e}")
 
     def _save_settings(self):
         """Save settings to disk."""
@@ -90,10 +112,13 @@ class MemoryManager:
                     storage_context, embed_model=self.embed_model
                 )
                 self.indexed = True
-                logger.info("Index loaded successfully")
             else:
                 # Build new index
                 await self._rebuild_index()
+
+            if self.indexed and not self.indexed_files:
+                self._load_index_metadata()
+            logger.info("Index loaded successfully")
 
         except Exception as e:
             logger.error(f"Failed to load/build index: {e}")
@@ -145,6 +170,8 @@ class MemoryManager:
             self.INDEX_DIR.mkdir(parents=True, exist_ok=True)
             self.index.storage_context.persist(persist_dir=str(self.INDEX_DIR))
             self.indexed = True
+            self.indexed_files = self._extract_indexed_files(all_documents)
+            self._save_index_metadata()
             logger.info("Index built and persisted successfully")
 
         except Exception as e:
@@ -161,6 +188,7 @@ class MemoryManager:
 
         self.index = None
         self.indexed = False
+        self.indexed_files = []
 
         if self.enabled:
             await self._rebuild_index()
@@ -212,7 +240,19 @@ class MemoryManager:
             "enabled": self.enabled,
             "indexed": self.indexed,
             "indexing": self._indexing,
+            "indexed_count": len(self.indexed_files),
+            "indexed_files": self.indexed_files,
         }
+
+    def _extract_indexed_files(self, documents: list) -> list[str]:
+        """Extract file paths from indexed documents."""
+        files = []
+        for doc in documents:
+            metadata = getattr(doc, "metadata", {}) or {}
+            path = metadata.get("file_path") or metadata.get("file_name")
+            if path:
+                files.append(path)
+        return sorted(set(files))
 
     async def shutdown(self):
         """Clean shutdown."""

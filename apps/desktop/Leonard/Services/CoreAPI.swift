@@ -209,6 +209,10 @@ actor CoreAPI {
         try await request(endpoint: "/tools", method: "GET")
     }
 
+    func getToolsStatus() async throws -> ToolsStatus {
+        try await request(endpoint: "/chat/tools", method: "GET")
+    }
+
     func toggleTool(_ id: String, enabled: Bool) async throws -> Bool {
         let body = ToolUpdateRequest(enabled: enabled)
         let response: SuccessResponse = try await request(
@@ -594,6 +598,11 @@ struct ToolsToggleRequest: Codable {
 struct ToolsToggleResponse: Codable {
     let enabled: Bool
     let message: String
+}
+
+struct ToolsStatus: Codable {
+    let tools: [Tool]
+    let enabled: Bool
 }
 
 // MARK: - Memory Models (Simplified)

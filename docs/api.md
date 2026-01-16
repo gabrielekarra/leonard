@@ -95,22 +95,29 @@ Remove an installed model.
 ### Tools
 
 #### GET /tools
-List all available MCP tools.
+List all available tools and their current enabled state.
 
 **Response:**
 ```json
 [
   {
-    "id": "filesystem",
-    "name": "Filesystem",
-    "description": "Read and write local files",
+    "id": "list_directory",
+    "name": "list_directory",
+    "description": "List files and folders in a directory",
     "icon": "folder",
     "enabled": true
   },
   {
-    "id": "terminal",
-    "name": "Terminal",
-    "description": "Execute shell commands",
+    "id": "read_file",
+    "name": "read_file",
+    "description": "Read the contents of a file",
+    "icon": "folder",
+    "enabled": true
+  },
+  {
+    "id": "run_command",
+    "name": "run_command",
+    "description": "Execute a shell command and return the output",
     "icon": "terminal",
     "enabled": false
   }

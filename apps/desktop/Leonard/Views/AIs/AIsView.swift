@@ -5,7 +5,6 @@ struct AIsView: View {
     @State private var installedModelsExpanded = true
     @State private var featuredExpanded = true
     @State private var searchResultsExpanded = true
-    @State private var toolsExpanded = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,14 +78,6 @@ struct AIsView: View {
                             )
                         }
 
-                        // Tools Section
-                        ToolsSection(
-                            toolsEnabled: $viewModel.toolsEnabled,
-                            isExpanded: $toolsExpanded,
-                            onToggle: { enabled in
-                                Task { await viewModel.setToolsEnabled(enabled) }
-                            }
-                        )
                     }
                     .padding(AppSpacing.medium)
                 }

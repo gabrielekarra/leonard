@@ -124,9 +124,24 @@ class ToolExecutor:
 
         if not tool:
             return ToolResult(
-                success=False,
+                status="error",
+                action=tool_name,
                 output=None,
                 error=f"Unknown tool: {tool_name}",
+                verification_passed=False,
+                verification_details=f"Unknown tool: {tool_name}",
+                message_user=f"Tool '{tool_name}' is not available",
+            )
+
+        if not tool.enabled:
+            return ToolResult(
+                status="error",
+                action=tool_name,
+                output=None,
+                error=f"Tool disabled: {tool_name}",
+                verification_passed=False,
+                verification_details=f"Tool disabled: {tool_name}",
+                message_user=f"Tool '{tool_name}' is disabled",
             )
 
         # Check if confirmation is needed
@@ -137,9 +152,13 @@ class ToolExecutor:
 
                 if not approved:
                     return ToolResult(
-                        success=False,
+                        status="error",
+                        action=tool_name,
                         output=None,
                         error="Operation cancelled by user",
+                        verification_passed=False,
+                        verification_details="Operation cancelled by user",
+                        message_user="Operation cancelled",
                     )
 
         # Execute the tool
@@ -151,16 +170,24 @@ class ToolExecutor:
 
         except TypeError as e:
             return ToolResult(
-                success=False,
+                status="error",
+                action=tool_name,
                 output=None,
                 error=f"Invalid parameters for {tool_name}: {e}",
+                verification_passed=False,
+                verification_details=f"Invalid parameters for {tool_name}: {e}",
+                message_user="Invalid parameters provided",
             )
         except Exception as e:
             logger.error(f"Tool {tool_name} failed: {e}")
             return ToolResult(
-                success=False,
+                status="error",
+                action=tool_name,
                 output=None,
                 error=f"Tool execution failed: {e}",
+                verification_passed=False,
+                verification_details=f"Tool execution failed: {e}",
+                message_user="Tool execution failed",
             )
 
     async def process_response(
@@ -226,5 +253,4 @@ class ToolExecutor:
             if isinstance(output, dict):
                 output = json.dumps(output, indent=2)
             return f"Tool executed successfully. Result:\n{output}"
-        else:
-            return f"Tool execution failed: {result.error}"
+        return f"Tool execution failed: {result.error or result.message_user}"
