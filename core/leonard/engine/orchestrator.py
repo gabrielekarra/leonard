@@ -4,6 +4,7 @@ Receives user messages, routes to appropriate model, returns response.
 To the user, it appears as one unified AI.
 """
 
+import os
 from pathlib import Path
 from typing import AsyncGenerator, Optional, Callable, Awaitable
 
@@ -26,7 +27,24 @@ class LeonardOrchestrator:
     executes, and returns a unified response.
     """
 
-    SYSTEM_PROMPT = """You are Leonard, a powerful AI assistant running locally on the user's computer.
+    # User context for path resolution
+    USER_HOME = os.path.expanduser("~")
+    USER_NAME = os.path.basename(USER_HOME)
+
+    # Common folder mappings (lowercase keys)
+    FOLDER_MAP = {
+        "downloads": "Downloads",
+        "download": "Downloads",
+        "scaricati": "Downloads",
+        "documents": "Documents",
+        "documenti": "Documents",
+        "desktop": "Desktop",
+        "scrivania": "Desktop",
+        "home": "",
+        "casa": "",
+    }
+
+    SYSTEM_PROMPT = f"""You are Leonard, a powerful AI assistant running locally on the user's computer.
 You have FULL access to the file system and can perform ANY file operation.
 
 YOUR CAPABILITIES:
@@ -41,13 +59,31 @@ YOUR CAPABILITIES:
 - run_command: Execute ANY shell command
 - get_system_info: Get system information
 
+USER CONTEXT:
+- Username: {USER_NAME}
+- Home directory: {USER_HOME}
+- Downloads: {USER_HOME}/Downloads
+- Documents: {USER_HOME}/Documents
+- Desktop: {USER_HOME}/Desktop
+
+PATH SHORTCUTS - When user mentions these, use the full path:
+- "Downloads", "download folder", "scaricati" → {USER_HOME}/Downloads
+- "Documents", "documenti", "my documents" → {USER_HOME}/Documents
+- "Desktop", "scrivania" → {USER_HOME}/Desktop
+- "home", "home folder" → {USER_HOME}
+
 CRITICAL RULES:
-1. You CAN and SHOULD perform file operations when asked. You are NOT limited to read-only.
-2. To RENAME a file: use move_file with source="/path/old_name.txt" destination="/path/new_name.txt"
-3. To MODIFY a file: read it first, then write_file with the modified content
-4. To CREATE a file: use write_file with the path and content
-5. ALWAYS use the appropriate tool. NEVER say you cannot do something if a tool exists for it.
-6. After using a tool, report the actual results.
+1. You CAN and MUST perform file operations when asked. You have FULL READ/WRITE/DELETE access.
+2. To DELETE a file: use delete_file. YOU CAN DELETE FILES - this is allowed and expected.
+3. To RENAME a file: use move_file with source="/path/old_name.txt" destination="/path/new_name.txt"
+4. To MODIFY a file: read it first, then write_file with the modified content
+5. To CREATE a file: use write_file with the path and content
+6. ALWAYS use the appropriate tool. NEVER say you cannot do something if a tool exists for it.
+7. After using a tool, report the actual results in NATURAL LANGUAGE only - NO JSON or tool syntax.
+8. NEVER show raw tool calls or JSON in your response. Just describe what you did.
+9. CRITICAL: When you receive [Tool Result], report EXACTLY those results. Copy the exact file names and sizes from the tool output. NEVER invent, guess, or substitute file names.
+10. Each [Tool Result] is for the CURRENT query only. Do NOT mix up results from previous queries.
+11. NEVER say "I cannot delete files" or "I don't have permission" - YOU DO HAVE PERMISSION. Just do it.
 
 You have FULL control over the file system. Use your tools!"""
 
@@ -176,6 +212,25 @@ Do NOT make up or guess any file names, paths, or system information."""
         final_response = ""
 
         for iteration in range(max_tool_iterations):
+            # CRITICAL: On first iteration, check for auto-detected tools BEFORE model generates response
+            # This prevents the model from hallucinating when we know exactly what tool to use
+            if iteration == 0 and self.tools_enabled and self.tool_executor:
+                auto_tool = self._detect_needed_tool(message)
+                if auto_tool:
+                    tool_name, params = auto_tool
+                    logger.info(f"Auto-triggering tool BEFORE model response: {tool_name} with params: {params}")
+                    tool_result = await self.tool_executor.execute(tool_name, params)
+                    if tool_result:
+                        self._last_tool_result = tool_result.to_dict()
+                        logger.info(f"Tool executed: success={tool_result.success}")
+
+                        if tool_result.success:
+                            # Add tool result to conversation so model can respond to it
+                            result_text = self.tool_executor.format_result_for_model(tool_result)
+                            self.conversation.append({"role": "user", "content": f"[Tool Result]\n{result_text}"})
+                            # Continue to next iteration where model will respond to tool result
+                            continue
+
             # Build messages with conversation history (include RAG on first iteration)
             user_msg = message if iteration == 0 else None
             messages = await self._build_messages(user_msg)
@@ -188,34 +243,14 @@ Do NOT make up or guess any file names, paths, or system information."""
 
             logger.debug(f"Model response (iteration {iteration}): {response[:500]}...")
 
-            # Check for tool calls
-            logger.info(f"Tools enabled: {self.tools_enabled}, executor: {self.tool_executor is not None}")
+            # Check for tool calls in model response (for operations we don't auto-detect)
             if self.tools_enabled and self.tool_executor:
-                # FIRST: Try our auto-detect which is more reliable than small models
-                # This ensures correct parameter extraction from user message
-                if iteration == 0:
-                    auto_tool = self._detect_needed_tool(message)
-                    if auto_tool:
-                        tool_name, params = auto_tool
-                        logger.info(f"Auto-triggering tool: {tool_name} with params: {params}")
-                        tool_result = await self.tool_executor.execute(tool_name, params)
-                        if tool_result:
-                            self._last_tool_result = tool_result.to_dict()
-                            logger.info(f"Tool executed: success={tool_result.success}")
-
-                            if tool_result.success:
-                                # Feed the result back to the model
-                                result_text = self.tool_executor.format_result_for_model(tool_result)
-                                self.conversation.append({"role": "user", "content": f"[Tool Result]\n{result_text}"})
-                                continue
-
-                # FALLBACK: Check if model generated a tool call (for operations we don't auto-detect)
                 cleaned_response, tool_result = await self.tool_executor.process_response(response)
 
                 if tool_result:
-                    # Tool was called
+                    # Tool was called by model
                     self._last_tool_result = tool_result.to_dict()
-                    logger.info(f"Tool executed: success={tool_result.success}")
+                    logger.info(f"Model-requested tool executed: success={tool_result.success}")
 
                     # Add assistant response and tool result to conversation
                     self.conversation.append({"role": "assistant", "content": cleaned_response})
@@ -231,14 +266,44 @@ Do NOT make up or guess any file names, paths, or system information."""
             final_response = response
             break
 
+        # Clean up any remaining tool artifacts from the final response
+        final_response = self._clean_response(final_response)
+
         # Add final response to conversation
         self.conversation.append({"role": "assistant", "content": final_response})
 
         return final_response
 
+    def _clean_response(self, response: str) -> str:
+        """Remove any tool JSON artifacts from the response."""
+        import re
+        cleaned = response
+
+        # Remove ```tool{...}``` blocks
+        cleaned = re.sub(r"```tool\s*\{.*?\}```", "", cleaned, flags=re.DOTALL)
+
+        # Remove ```json{...}``` blocks
+        cleaned = re.sub(r"```json\s*\{.*?\}```", "", cleaned, flags=re.DOTALL)
+
+        # Remove code blocks containing "tool" JSON
+        cleaned = re.sub(r"```[^`]*\"tool\"[^`]*```", "", cleaned, flags=re.DOTALL)
+
+        # Remove standalone tool JSON
+        cleaned = re.sub(r'\{\s*["\']tool["\']\s*:\s*["\'][^"\']+["\']\s*,\s*["\']parameters["\']\s*:\s*\{[^}]*\}\s*\}', "", cleaned, flags=re.DOTALL)
+
+        # Remove Results: sections
+        cleaned = re.sub(r"Results?:\s*```[^`]*```", "", cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r"Results?:\s*\[[^\]]*\]", "", cleaned, flags=re.DOTALL)
+
+        # Clean up whitespace
+        cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned)
+        cleaned = cleaned.strip()
+
+        return cleaned
+
     async def chat_stream(self, message: str) -> AsyncGenerator[str, None]:
         """
-        Streaming version of chat.
+        Streaming version of chat with tool support.
         Yields response chunks as they're generated.
 
         Args:
@@ -259,6 +324,20 @@ Do NOT make up or guess any file names, paths, or system information."""
         # Ensure model ready
         await self._ensure_model_ready(decision.model_id)
 
+        # FIRST: Check for auto-detected tools BEFORE generating response
+        if self.tools_enabled and self.tool_executor:
+            auto_tool = self._detect_needed_tool(message)
+            if auto_tool:
+                tool_name, params = auto_tool
+                logger.info(f"Auto-triggering tool (stream): {tool_name} with params: {params}")
+                tool_result = await self.tool_executor.execute(tool_name, params)
+                if tool_result:
+                    self._last_tool_result = tool_result.to_dict()
+                    if tool_result.success:
+                        # Add tool result to conversation
+                        result_text = self.tool_executor.format_result_for_model(tool_result)
+                        self.conversation.append({"role": "user", "content": f"[Tool Result]\n{result_text}"})
+
         # Build messages with RAG context
         messages = await self._build_messages(message)
 
@@ -271,7 +350,37 @@ Do NOT make up or guess any file names, paths, or system information."""
             full_response += chunk
             yield chunk
 
-        # Save to conversation
+        # Check if response contains a tool call
+        if self.tools_enabled and self.tool_executor:
+            cleaned_response, tool_result = await self.tool_executor.process_response(full_response)
+
+            if tool_result:
+                # Tool was called by model - execute and stream followup
+                self._last_tool_result = tool_result.to_dict()
+                self.conversation.append({"role": "assistant", "content": cleaned_response})
+
+                result_text = self.tool_executor.format_result_for_model(tool_result)
+                self.conversation.append({"role": "user", "content": f"[Tool Result]\n{result_text}"})
+
+                # Generate followup response
+                followup_messages = await self._build_messages(None)
+                yield "\n\n"  # Separator
+
+                followup_response = ""
+                async for chunk in self.process_manager.chat_stream(
+                    model_id=decision.model_id,
+                    messages=followup_messages,
+                ):
+                    followup_response += chunk
+                    yield chunk
+
+                # Clean and save
+                followup_response = self._clean_response(followup_response)
+                self.conversation.append({"role": "assistant", "content": followup_response})
+                return
+
+        # Clean and save response
+        full_response = self._clean_response(full_response)
         self.conversation.append({"role": "assistant", "content": full_response})
 
     async def _ensure_model_ready(self, model_id: str):
@@ -324,6 +433,21 @@ Do NOT make up or guess any file names, paths, or system information."""
 
         return messages
 
+    def _resolve_folder_name(self, message: str) -> Optional[str]:
+        """
+        Try to resolve common folder names in a message to full paths.
+        Returns the full path if a known folder is mentioned, None otherwise.
+        """
+        msg_lower = message.lower()
+        for folder_key, folder_name in self.FOLDER_MAP.items():
+            # Match the folder name as a word (not part of another word)
+            if folder_key in msg_lower:
+                if folder_name:
+                    return os.path.join(self.USER_HOME, folder_name)
+                else:
+                    return self.USER_HOME
+        return None
+
     def _detect_needed_tool(self, message: str) -> Optional[tuple[str, dict]]:
         """
         Detect if a tool should be used based on the user's message.
@@ -332,33 +456,54 @@ Do NOT make up or guess any file names, paths, or system information."""
         import re
         msg_lower = message.lower()
 
-        # Detect file listing requests
-        list_patterns = [
-            r"(?:quali|quanti|che|cosa|what|which|list|show|elenc).{0,30}(?:file|cartell|folder|director|contenut)",
-            r"(?:file|cartell|folder|director).{0,30}(?:ci sono|c'è|there|exist|present|contien)",
-            r"(?:mostra|dimmi|tell me|show me).{0,20}(?:file|cartell|folder)",
-        ]
-        for pattern in list_patterns:
-            if re.search(pattern, msg_lower):
-                # Try to extract path
-                path_match = re.search(r'["\']?(/[^\s"\']+)["\']?', message)
-                if path_match:
-                    return ("list_directory", {"path": path_match.group(1)})
-                # Check for ~/
-                path_match = re.search(r'["\']?(~/[^\s"\']+)["\']?', message)
-                if path_match:
-                    return ("list_directory", {"path": path_match.group(1)})
-
-        # Detect file reading requests
+        # FIRST: Detect file reading requests (more specific, check before list)
+        # Check if message mentions reading a specific file
         read_patterns = [
             r"(?:leggi|read|apri|open|mostra|show|contenuto|content).{0,30}(?:file|documento)",
-            r"(?:cosa|what).{0,20}(?:c'è|dice|says|contains).{0,20}(?:file|dentro)",
+            r"(?:cosa|what).{0,20}(?:c'è|dice|says|contains).{0,20}(?:nel\s+)?file",  # "nel file"
+            r"(?:open|leggi|apri)\s+(/[^\s]+)",  # "open /path" with any path
         ]
         for pattern in read_patterns:
             if re.search(pattern, msg_lower):
-                path_match = re.search(r'["\']?(/[^\s"\']+\.[a-z]+)["\']?', message, re.IGNORECASE)
+                # First try path with extension
+                path_match = re.search(r'["\']?(/[^\s"\']+\.[a-z0-9]+)["\']?', message, re.IGNORECASE)
                 if path_match:
                     return ("read_file", {"path": path_match.group(1)})
+                # Then try any path (for files without extensions like /etc/hosts)
+                path_match = re.search(r'["\']?(/[^\s"\']+)["\']?', message)
+                if path_match:
+                    path = path_match.group(1)
+                    # Check if it looks like a file (not a directory)
+                    if not path.endswith("/"):
+                        return ("read_file", {"path": path})
+
+        # SECOND: Detect file listing requests
+        list_patterns = [
+            r"(?:quali|quanti|che|what|which|list|show|elenc).{0,30}(?:file|cartell|folder|director|contenut)",
+            r"(?:file|cartell|folder|director).{0,30}(?:ci sono|c'è|there|exist|present|contien)",
+            r"(?:mostra|dimmi|tell me|show me).{0,20}(?:file|cartell|folder)",
+            r"what'?s\s+in\s+(?:my\s+)?(?:the\s+)?(\w+)",  # "what's in downloads"
+            r"(\w+)\s+(?:folder\s+)?contents?",  # "desktop contents"
+            r"cosa\s+c'è\s+(?:sul|sulla|nella|nei|in)",  # Italian "cosa c'è sul/nella"
+            r"^(?:and\s+)?(?:in|on)\s+(?:the\s+)?(?:my\s+)?(desktop|scrivania|downloads?|scaricati|documents?|documenti)\s*\??$",  # short follow-up "and in desktop?"
+            r"^what\s+about\s+(?:the\s+)?(?:my\s+)?(desktop|scrivania|downloads?|scaricati|documents?|documenti)\s*\??$",  # "what about desktop?"
+            r"^(?:e\s+)?(?:sul|sulla|nella|nei|in)\s+(?:la\s+)?(scrivania|desktop|scaricati|downloads?|documenti|documents?)\s*\??$",  # Italian follow-ups
+        ]
+        for pattern in list_patterns:
+            if re.search(pattern, msg_lower):
+                # Check for ~/ first and expand it
+                path_match = re.search(r'["\']?(~/[^\s"\']+)["\']?', message)
+                if path_match:
+                    expanded = os.path.expanduser(path_match.group(1))
+                    return ("list_directory", {"path": expanded})
+                # Try to extract explicit absolute path
+                path_match = re.search(r'["\']?(/[^\s"\']+)["\']?', message)
+                if path_match:
+                    return ("list_directory", {"path": path_match.group(1)})
+                # Try to resolve common folder name
+                folder_path = self._resolve_folder_name(message)
+                if folder_path:
+                    return ("list_directory", {"path": folder_path})
 
         # Detect rename/move requests
         rename_patterns = [
@@ -370,7 +515,6 @@ Do NOT make up or guess any file names, paths, or system information."""
                 if len(paths) >= 2:
                     return ("move_file", {"source": paths[0], "destination": paths[1]})
                 elif len(paths) == 1:
-                    import os
                     source = paths[0]
                     dir_name = os.path.dirname(source)
 
@@ -392,13 +536,23 @@ Do NOT make up or guess any file names, paths, or system information."""
 
         # Detect delete requests
         delete_patterns = [
-            r"(?:elimina|delete|rimuovi|remove|cancella).{0,30}(?:file|cartell|folder)",
+            r"(?:elimina|delete|rimuovi|remove|cancella).{0,30}(?:file|cartell|folder|screenshot|immagin|image|foto|photo)",
+            r"(?:can you |puoi |please |you can )?(?:elimina|delete|rimuovi|remove|cancella)",  # commands with optional prefix
+            r"(?:you can |puoi )delete",  # "you can delete"
         ]
         for pattern in delete_patterns:
             if re.search(pattern, msg_lower):
+                # Check for explicit path first
                 path_match = re.search(r'["\']?(/[^\s"\']+)["\']?', message)
                 if path_match:
                     return ("delete_file", {"path": path_match.group(1)})
+                # Check for folder + file type pattern (e.g., "delete screenshots in desktop")
+                folder_path = self._resolve_folder_name(message)
+                if not folder_path:
+                    # Default to Desktop for delete operations without specific folder
+                    folder_path = os.path.join(self.USER_HOME, "Desktop")
+                # List the directory first so user can see what will be deleted
+                return ("list_directory", {"path": folder_path})
 
         # Detect create file requests
         create_patterns = [
@@ -406,25 +560,43 @@ Do NOT make up or guess any file names, paths, or system information."""
         ]
         for pattern in create_patterns:
             if re.search(pattern, msg_lower):
+                # Try explicit path first
                 path_match = re.search(r'["\']?(/[^\s"\']+\.[a-zA-Z0-9]+)["\']?', message)
                 if path_match:
-                    # Try to find content with various patterns
+                    file_path = path_match.group(1)
+                else:
+                    # Try to find filename and folder separately
+                    # Pattern: "called/named X.ext" or "chiamato X.ext"
+                    filename_match = re.search(r'(?:called|named|chiamat[ao])\s+["\']?([a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+)["\']?', message, re.IGNORECASE)
+                    if not filename_match:
+                        # Pattern: just "file X.ext"
+                        filename_match = re.search(r'file\s+["\']?([a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+)["\']?', message, re.IGNORECASE)
+
+                    if filename_match:
+                        filename = filename_match.group(1)
+                        folder_path = self._resolve_folder_name(message)
+                        if not folder_path:
+                            # Default to Desktop if no folder specified
+                            folder_path = os.path.join(self.USER_HOME, "Desktop")
+                        file_path = os.path.join(folder_path, filename)
+                    else:
+                        file_path = None
+
+                if file_path:
+                    # Try to find content
                     content = ""
-                    # Pattern: "contenuto X" or "content X" or "con X" or "with X"
                     content_patterns = [
                         r'(?:contenuto|content|testo|text)\s*[:\s]\s*["\'](.+?)["\']',
                         r'(?:contenuto|content|testo|text)\s+(.+?)$',
                         r'\bcon\s+(?:contenuto\s+)?["\'](.+?)["\']',
-                        r'\bcon\s+(?:contenuto\s+)?(.+?)$',
                         r'\bwith\s+(?:content\s+)?["\'](.+?)["\']',
-                        r'\bwith\s+(?:content\s+)?(.+?)$',
                     ]
                     for cp in content_patterns:
                         cm = re.search(cp, message, re.IGNORECASE)
                         if cm:
                             content = cm.group(1).strip()
                             break
-                    return ("write_file", {"path": path_match.group(1), "content": content})
+                    return ("write_file", {"path": file_path, "content": content})
 
         # Detect system info requests
         if re.search(r"(?:system|sistema|info|informazion|memoria|memory|cpu|disk|spazio)", msg_lower):
@@ -443,6 +615,42 @@ Do NOT make up or guess any file names, paths, or system information."""
                 path_match = re.search(r'["\']?(~/[^\s"\']+)["\']?', message)
                 if path_match:
                     return ("organize_files", {"directory": path_match.group(1)})
+                # Try to resolve common folder name
+                folder_path = self._resolve_folder_name(message)
+                if folder_path:
+                    return ("organize_files", {"directory": folder_path})
+
+        # Detect create folder/directory requests
+        create_dir_patterns = [
+            r"(?:crea|create|nuovo|new|fai).{0,20}(?:cartella|folder|directory)",
+            r"(?:cartella|folder|directory).{0,20}(?:nuov|new|crea)",
+        ]
+        for pattern in create_dir_patterns:
+            if re.search(pattern, msg_lower):
+                # Try explicit path first
+                path_match = re.search(r'["\']?(/[^\s"\']+)["\']?', message)
+                if path_match:
+                    return ("create_directory", {"path": path_match.group(1)})
+                # Check for ~/
+                path_match = re.search(r'["\']?(~/[^\s"\']+)["\']?', message)
+                if path_match:
+                    return ("create_directory", {"path": path_match.group(1)})
+                # Try to find folder name and location
+                folder_path = self._resolve_folder_name(message)
+                if folder_path:
+                    # Extract the new folder name from message
+                    # Pattern 1: "folder named/called X" or "cartella chiamata X"
+                    name_match = re.search(r'(?:folder|cartella|directory)\s+(?:named|called|chiamat[ao]|nome)\s+["\']?([a-zA-Z0-9_\-\.]+)["\']?', message, re.IGNORECASE)
+                    if name_match:
+                        new_folder = name_match.group(1)
+                        return ("create_directory", {"path": os.path.join(folder_path, new_folder)})
+                    # Pattern 2: "folder X" but exclude common keywords
+                    name_match = re.search(r'(?:folder|cartella|directory)\s+["\']?([a-zA-Z0-9_\-\.]+)["\']?', message, re.IGNORECASE)
+                    if name_match:
+                        new_folder = name_match.group(1)
+                        # Skip if matched word is a keyword
+                        if new_folder.lower() not in ('named', 'called', 'chiamata', 'chiamato', 'nome', 'in', 'on', 'at', 'new', 'nuovo', 'nuova'):
+                            return ("create_directory", {"path": os.path.join(folder_path, new_folder)})
 
         return None
 

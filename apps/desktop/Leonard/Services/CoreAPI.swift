@@ -237,6 +237,21 @@ actor CoreAPI {
         return response.enabled
     }
 
+    // MARK: - Memory (Simplified)
+
+    func getMemoryStatus() async throws -> MemoryStatus {
+        try await request(endpoint: "/memory/status", method: "GET")
+    }
+
+    func toggleMemory(enabled: Bool) async throws -> MemoryStatus {
+        let body = ToggleMemoryRequest(enabled: enabled)
+        return try await request(
+            endpoint: "/memory/toggle",
+            method: "POST",
+            body: body
+        )
+    }
+
     // MARK: - Private
 
     private func request<T: Decodable>(
@@ -579,4 +594,16 @@ struct ToolsToggleRequest: Codable {
 struct ToolsToggleResponse: Codable {
     let enabled: Bool
     let message: String
+}
+
+// MARK: - Memory Models (Simplified)
+
+struct ToggleMemoryRequest: Codable {
+    let enabled: Bool
+}
+
+struct MemoryStatus: Codable {
+    let enabled: Bool
+    let indexed: Bool
+    let indexing: Bool
 }

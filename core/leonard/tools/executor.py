@@ -66,9 +66,21 @@ class ToolExecutor:
         Returns:
             Tuple of (tool_name, parameters) if found, None otherwise
         """
-        # Look for ```tool blocks
-        pattern = r"```tool\s*\n?\s*({.*?})\s*\n?```"
-        match = re.search(pattern, text, re.DOTALL)
+        # Try multiple patterns to catch different model output formats
+
+        # Pattern 1: ```tool{...}``` (no space/newline)
+        pattern1 = r"```tool\s*({.*?})```"
+        match = re.search(pattern1, text, re.DOTALL)
+
+        # Pattern 2: ```tool\n{...}\n``` (with newlines)
+        if not match:
+            pattern2 = r"```tool\s*\n\s*({.*?})\s*\n?```"
+            match = re.search(pattern2, text, re.DOTALL)
+
+        # Pattern 3: ```json with tool inside
+        if not match:
+            pattern3 = r"```(?:json)?\s*({[^`]*\"tool\"[^`]*})```"
+            match = re.search(pattern3, text, re.DOTALL)
 
         if match:
             try:
@@ -81,22 +93,20 @@ class ToolExecutor:
                     return (tool_name, parameters)
             except json.JSONDecodeError:
                 logger.warning(f"Failed to parse tool call JSON: {match.group(1)}")
-        else:
-            # Try alternative formats that models might use
-            # Format: {"tool": "name", "parameters": {...}}
-            alt_pattern = r'{\s*"tool"\s*:\s*"(\w+)"\s*,\s*"parameters"\s*:\s*({[^}]*})\s*}'
-            alt_match = re.search(alt_pattern, text, re.DOTALL)
-            if alt_match:
-                try:
-                    tool_name = alt_match.group(1)
-                    parameters = json.loads(alt_match.group(2))
-                    logger.info(f"Parsed tool call (alt format): {tool_name} with params: {parameters}")
-                    return (tool_name, parameters)
-                except json.JSONDecodeError:
-                    pass
 
-            logger.debug(f"No tool call found in response")
+        # Pattern 4: Standalone JSON {"tool": "name", "parameters": {...}}
+        alt_pattern = r'{\s*"tool"\s*:\s*"([^"]+)"\s*,\s*"parameters"\s*:\s*({[^}]*})\s*}'
+        alt_match = re.search(alt_pattern, text, re.DOTALL)
+        if alt_match:
+            try:
+                tool_name = alt_match.group(1)
+                parameters = json.loads(alt_match.group(2))
+                logger.info(f"Parsed tool call (alt format): {tool_name} with params: {parameters}")
+                return (tool_name, parameters)
+            except json.JSONDecodeError:
+                pass
 
+        logger.debug(f"No tool call found in response")
         return None
 
     async def execute(self, tool_name: str, parameters: dict) -> ToolResult:
@@ -175,9 +185,37 @@ class ToolExecutor:
         tool_name, parameters = tool_call
         result = await self.execute(tool_name, parameters)
 
-        # Remove the tool block from response
-        cleaned = re.sub(r"```tool\s*\n?\s*{.*?}\s*\n?```", "", response, flags=re.DOTALL)
+        # Remove the tool block from response (handles multiple formats)
+        cleaned = response
+
+        # 1. Remove ```tool{...}``` blocks (with or without spaces/newlines)
+        cleaned = re.sub(r"```tool\s*\{.*?\}```", "", cleaned, flags=re.DOTALL)
+
+        # 2. Remove ```json{...}``` blocks
+        cleaned = re.sub(r"```json\s*\{.*?\}```", "", cleaned, flags=re.DOTALL)
+
+        # 3. Remove generic code blocks that contain "tool" JSON
+        cleaned = re.sub(r"```[^`]*\"tool\"[^`]*```", "", cleaned, flags=re.DOTALL)
+
+        # 4. Remove standalone tool JSON: {"tool": "...", "parameters": {...}}
+        cleaned = re.sub(r'\{\s*["\']tool["\']\s*:\s*["\'][^"\']+["\']\s*,\s*["\']parameters["\']\s*:\s*\{[^}]*\}\s*\}', "", cleaned, flags=re.DOTALL)
+
+        # 5. Remove Results: sections with code blocks
+        cleaned = re.sub(r"Results?:\s*```[^`]*```", "", cleaned, flags=re.DOTALL)
+
+        # 6. Remove Result: sections without code blocks (just JSON arrays/objects)
+        cleaned = re.sub(r"Results?:\s*\[[^\]]*\]", "", cleaned, flags=re.DOTALL)
+
+        # 7. Remove any remaining ```...``` blocks that look like JSON
+        cleaned = re.sub(r"```\s*[\[\{].*?[\]\}]\s*```", "", cleaned, flags=re.DOTALL)
+
+        # 8. Clean up leftover artifacts
+        cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned)
         cleaned = cleaned.strip()
+
+        # 9. If response is now empty or just whitespace, use a generic success message
+        if not cleaned or cleaned.isspace():
+            cleaned = ""
 
         return (cleaned, result)
 

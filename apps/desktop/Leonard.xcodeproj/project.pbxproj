@@ -28,6 +28,8 @@
 		A1000013212F0013 /* CoreAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000013212F0012 /* CoreAPI.swift */; };
 		A1000014212F0014 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000014212F0013 /* CoreBridge.swift */; };
 		A1000015212F0015 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000015212F0014 /* Assets.xcassets */; };
+		A1000016212F0016 /* MemoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000016212F0015 /* MemoryView.swift */; };
+		A1000017212F0017 /* MemoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000017212F0016 /* MemoryViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +55,8 @@
 		A1000013212F0012 /* CoreAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreAPI.swift; sourceTree = "<group>"; };
 		A1000014212F0013 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
 		A1000015212F0014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1000016212F0015 /* MemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryView.swift; sourceTree = "<group>"; };
+		A1000017212F0016 /* MemoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,8 +115,17 @@
 				A10000E8212FE008 /* Sidebar */,
 				A10000E9212FE009 /* AskLeonard */,
 				A10000EA212FE00A /* AIs */,
+				A10000EB212FE00B /* Memory */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		A10000EB212FE00B /* Memory */ = {
+			isa = PBXGroup;
+			children = (
+				A1000016212F0015 /* MemoryView.swift */,
+			);
+			path = Memory;
 			sourceTree = "<group>";
 		};
 		A10000E5212FE005 /* Models */ = {
@@ -131,6 +144,7 @@
 			children = (
 				A1000011212F0010 /* ChatViewModel.swift */,
 				A1000012212F0011 /* AIsViewModel.swift */,
+				A1000017212F0016 /* MemoryViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -263,6 +277,8 @@
 				A1000012212F0012 /* AIsViewModel.swift in Sources */,
 				A1000013212F0013 /* CoreAPI.swift in Sources */,
 				A1000014212F0014 /* CoreBridge.swift in Sources */,
+				A1000016212F0016 /* MemoryView.swift in Sources */,
+				A1000017212F0017 /* MemoryViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

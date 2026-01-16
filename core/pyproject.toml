@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "leonard"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.15"
 # API
 fastapi = "^0.115.0"
 uvicorn = {extras = ["standard"], version = "^0.32.0"}
@@ -21,14 +21,10 @@ sse-starlette = "^2.0.0"
 starlette-context = "^0.3.6"
 # HuggingFace
 huggingface-hub = "^0.27.0"
-# RAG - Embeddings and Vector Storage
-sentence-transformers = "^2.2.2"
-lancedb = "^0.4.0"
-pyarrow = "^14.0.0"
-# RAG - Document Parsing
-pypdf = "^3.17.0"
-python-docx = "^1.1.0"
-openpyxl = "^3.1.2"
+# RAG - LlamaIndex (local embeddings, no API keys needed)
+llama-index-core = "^0.12.0"
+llama-index-embeddings-huggingface = "^0.5.0"
+llama-index-readers-file = "^0.4.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
